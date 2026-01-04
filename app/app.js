@@ -11,15 +11,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-document.getElementById('video-draft-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  await createVideoDraft();
-});
+document
+  .getElementById('video-draft-form')
+  .addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await createVideoDraft();
+  });
 
-document.getElementById('login-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  await login();
-});
+document
+  .getElementById('login-form')
+  .addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await login();
+  });
 
 async function createVideoDraft() {
   const title = document.getElementById('video-title').value;
@@ -254,7 +258,8 @@ function viewVideo(video) {
   currentVideo = video;
   document.getElementById('video-display').style.display = 'block';
   document.getElementById('video-title-display').textContent = video.title;
-  document.getElementById('video-description-display').textContent = video.description;
+  document.getElementById('video-description-display').textContent =
+    video.description;
 
   const thumbnailImg = document.getElementById('thumbnail-image');
   if (!video.thumbnail_url) {
