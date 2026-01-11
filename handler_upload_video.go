@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
+	"path"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -91,10 +95,32 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	key := getAssetPath(mediaType)
 
+	directory, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to get video aspect ratio", nil)
+		return
+	}
+	
+	key = path.Join(directory, key)
+
+	processedFilePath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to process video", nil)
+		return
+	}
+	defer os.Remove(processedFilePath)
+
+	processedFile, err := os.Open(processedFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to open process file", nil)
+		return
+	}
+	defer processedFile.Close()
+
 	cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: 	 &cfg.s3Bucket,
 		Key: 		 &key, 
-		Body:   	 tempFile,
+		Body:   	 processedFile,
 		ContentType: &mediaType,
 	})
 
@@ -106,4 +132,26 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	
+}
+
+func processVideoForFastStart(inputFilePath string) (string, error) {
+	processedFilePath := fmt.Sprintf("%s.processing", inputFilePath)
+
+	cmd := exec.Command("ffmpeg", "-i", inputFilePath, "-movflags", "faststart", "-codec", "copy", "-f", "mp4", processedFilePath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("error processing video: %s, %v", stderr.String(), err)
+	}
+
+	fileInfo, err := os.Stat(processedFilePath)
+	if err != nil {
+		return "", fmt.Errorf("could not stat processed file: %v", err)
+	}
+	if fileInfo.Size() == 0 {
+		return "", fmt.Errorf("processed file is empty")
+	}
+
+	return processedFilePath, nil
 }

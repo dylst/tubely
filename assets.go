@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -45,4 +50,60 @@ func mediaTypeToExt(mediaType string) string {
 		return ".bin"
 	}
 	return "." + parts[1]
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+	buf := bytes.NewBuffer([]byte{})
+	cmd.Stdout = buf
+
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	type output struct{
+		Streams []struct{
+			CodecType  string `json:"codec_type"`
+			Width int `json:"width"`
+			Height int `json:"height"`
+		} `json:"streams"`
+	}
+
+	res := output{}
+	err = json.Unmarshal(buf.Bytes(), &res)
+	if err != nil {
+		return "", err
+	}
+
+	ind := -1 
+	for i, stream := range res.Streams {
+		if stream.CodecType == "video" {
+			ind = i
+			break
+		}
+	}
+
+	if ind == -1 {
+		return "", errors.New("No video found")
+	}
+
+	aspectRatio := calculateAspectRatio(res.Streams[ind].Width, res.Streams[ind].Height)
+
+	return aspectRatio, nil
+}
+
+func calculateAspectRatio(width, height int) string {
+	ratio := float64(width) / float64(height)
+	target16_9 := 16.0 / 9.0 
+	target9_16 := 9.0 / 16.0 
+	epsilon := 0.05
+
+	if math.Abs(ratio - target16_9) < epsilon {
+		return "landscape"
+	} else if math.Abs(ratio - target9_16) < epsilon {
+		return "portrait"
+	}
+
+	return "other"
 }
